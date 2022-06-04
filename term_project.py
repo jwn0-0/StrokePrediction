@@ -1,18 +1,24 @@
 import numpy as np
 import pandas as pd
+# for visualization
 import matplotlib.pyplot as plt
 import seaborn as sns
+from sklearn import tree
+# for data preprocessing
 from sklearn.preprocessing import LabelEncoder
-from sklearn.preprocessing import StandardScaler
-from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
+# for feature importances
+from sklearn.ensemble import ExtraTreesClassifier
+# knn classifier
 from sklearn.neighbors import KNeighborsClassifier
+# decision tree classifier
+from sklearn.tree import DecisionTreeClassifier
+# for data evaluation
+from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, recall_score, precision_score, f1_score, confusion_matrix
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from sklearn.model_selection import KFold
-from sklearn.ensemble import ExtraTreesClassifier
 from sklearn.model_selection import cross_val_score
-from sklearn.tree import DecisionTreeClassifier
-from sklearn import tree
 
 '''
 show visually statistical information of dataSet
@@ -96,6 +102,32 @@ def label_encoder(df):
 
 
 '''
+scale numerical features in independent variables using a various scaling method
+@:param
+    - X: dataSet for independent variable in separated target and independent
+    - numeric_col_names: list of name of numerical features 
+    - method(default=std): scaling method
+        std - StandardScaling
+        minmax - MinMaxScaling
+        robust - RobustScaling
+@:return
+    scaled result
+'''
+def scaling_data(X, numeric_col_names, method='std'):
+    if method == 'std':
+        std = StandardScaler()
+        return std.fit_transform(X[numeric_col_names])
+    elif method == 'minmax':
+        min_max = MinMaxScaler()
+        return min_max.fit_transform(X[numeric_col_names])
+    elif method == 'robust':
+        robust = RobustScaler()
+        return robust.fit_transform(X[numeric_col_names])
+    else:
+        return -1
+
+
+'''
 tune hyper parameter of K-Nearest Neighbors (k)
 @:param 
     - X: independent variables
@@ -148,8 +180,9 @@ train knn model and evaluate its model
     dataFrames of result of holdout method and k-fold method 
 '''
 def train_and_evaluate_knn(X, y, k=5, test_size=0.2, param_tuning=False, method='gscv'):
-    # split data set into train set and test set
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42, shuffle=True)
+    # split data set into train set and test set with stratify, shuffle options
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42, shuffle=True,
+                                                        stratify=y)
     if not param_tuning:  # if not use hyper parameter tuning
         # create new knn model with k
         knnClassifier = KNeighborsClassifier(n_neighbors=k)
@@ -163,6 +196,7 @@ def train_and_evaluate_knn(X, y, k=5, test_size=0.2, param_tuning=False, method=
 
         # get each scores of holdout method result
         holdout_result = {'k': k
+            , 'Test Size Ratio': test_size
             , 'Accuracy': accuracy_score(y_test, y_predict)
             , 'Precision': precision_score(y_test, y_predict, zero_division=0)
             , 'Recall': recall_score(y_test, y_predict, zero_division=0)
@@ -189,6 +223,7 @@ def train_and_evaluate_knn(X, y, k=5, test_size=0.2, param_tuning=False, method=
 
         # get each scores of holdout method result
         holdout_result = {'k': tunedParameter
+            , 'Test Size Ratio': test_size
             , 'Accuracy': accuracy_score(y_test, y_tuned_predict)
             , 'Precision': precision_score(y_test, y_tuned_predict, zero_division=0)
             , 'Recall': recall_score(y_test, y_tuned_predict, zero_division=0)
@@ -279,18 +314,24 @@ def show_feature_importances(X, y):
 function: decisionTree
 A decision tree is created through train data set and predictions are made through test data set.
 return the model's accuracy.
+@:param
+    - model: decision tree classifier
+@:return
+    - train accuracy and test_accuracy
 '''
-def decisionTree(x_train, y_train, x_test, y_test):
-    dt_clf.fit(x_train, y_train)
-    pred = dt_clf.predict(x_test)
-    return accuracy_score(y_test, pred)
+def decisionTree(model):
+    model.fit(x_train, y_train)
+    train_accuracy = model.score(x_train, y_train)
+    test_accuracy = model.score(x_test, y_test)
+    return train_accuracy, test_accuracy
 
 
 '''
 function: gridSearch
 Find the optimal depth among the depth of the tree from 1 to 10.
 - refit=True: Re-learn with the best parameter settings.
-Returns optimal hyperparameters, highest accuracy, and accuracy of the test data set.
+@:return
+    optimal hyperparameters, highest accuracy, and accuracy of the test data set.
 '''
 def gridSearch():
     m_depth = np.linspace(1, 10)
@@ -307,9 +348,9 @@ def gridSearch():
     # Hyperparameter adjustment in the learning process returns the model with the best performance
     estimator = grid_tree.best_estimator_
     # Assess model performance in test data
-    gr_pred = estimator.predict(x_test)
+    # gr_pred = estimator.predict(x_test)
 
-    return grid_tree.best_params_, grid_tree.best_score_, accuracy_score(y_test, gr_pred)
+    return grid_tree.best_params_, grid_tree.best_score_, estimator
 
 
 '''
@@ -320,16 +361,23 @@ Visualize the decision tree
 - filed: Decide whether to color the node for the class
 - feature_names: passing the name of the attribute
 - rounded: Determines whether to round the border of the node.
-
+@:param
+    - model: decision tree base model 
+    - best_model: hyperparameter tuned decision tree
+@:return
+    None
 '''
-def drawTree():
+def drawTree(model, best_model):
     plt.figure(figsize=(45, 20))
-    tree.plot_tree(dt_clf, filled=True, feature_names=feature_names, rounded=True)
+    tree.plot_tree(model, filled=True, feature_names=feature_names, rounded=True)
+    plt.title('Decision Tree')
     plt.show()
     # pruning
-    tree.plot_tree(dt_clf, max_depth=3, filled=True, feature_names=feature_names, rounded=True)
+    tree.plot_tree(best_model, filled=True, feature_names=feature_names, rounded=True)
+    plt.title('Decision Tree (best param)')
     plt.show()
-    tree.plot_tree(dt_clf, max_depth=1, filled=True, feature_names=feature_names, rounded=True)
+    tree.plot_tree(dt_clf, max_depth=2, filled=True, feature_names=feature_names, rounded=True)
+    plt.title('max depth = 2')
     plt.show()
 
 
@@ -338,9 +386,13 @@ function: kFordEv
 Cross-validation is performed by separating into n sets of folds.
 - cv_accuracy : Create a list for accuracy per fold set.
 - n_iter = repeat n times
-Returns the average of the accuracy per fold set.
+@:param
+    n: number of split in k-fold 
+    model: decision tree model
+@:return
+    the average of the accuracy per fold set.
 '''
-def kFordEv(n):
+def kFordEv(n, model):
     kfold = KFold(n_splits=n)
 
     cv_accuracy = []
@@ -351,9 +403,9 @@ def kFordEv(n):
         y_train, y_test = y.iloc[train_index], y.iloc[test_index]
 
         # training
-        dt_clf.fit(x_train, y_train)
+        model.fit(x_train, y_train)
         # predict
-        pred = dt_clf.predict(x_test)
+        pred = model.predict(x_test)
         n_iter += 1
 
         # Measure accuracy every iteration(Round to 5 decimal places)
@@ -373,11 +425,14 @@ def kFordEv(n):
 function: crossVal
 It performs learning and predictive evaluation internally at once.
 - cv : Number of cross-validation sets
-- scaling : Performance indicator, current accuracy is performance indicator.
-Returns verification-specific accuracy and average verification accuracy.
+- scoring : Performance indicator, current accuracy is performance indicator.
+@:param
+    model: decision tree model
+@:return
+    verification-specific accuracy and average verification accuracy.
 '''
-def crossVal():
-    scores = cross_val_score(dt_clf, x_train, y_train, scoring='accuracy', cv=5)
+def crossVal(model):
+    scores = cross_val_score(model, x_train, y_train, scoring='accuracy', cv=5)
     return scores, np.mean(scores)
 
 
@@ -388,14 +443,15 @@ Data Inspection
 # read csv file
 stroke = pd.read_csv('healthcare-dataset-stroke-data.csv')
 
-# print head and shape of dataSet
+# print dataSet information
 print(stroke.head())
+print(stroke.describe())
+print(stroke.info())
 print(format(stroke.shape))
 
 # plot data information
 statistical_info(stroke)
 stroke_distribution(stroke)
-
 
 '''
 Data Preprocessing
@@ -404,7 +460,7 @@ Data Preprocessing
 stroke['smoking_status'] = stroke['smoking_status'].replace('Unknown', np.NaN)
 # show missing value
 miss_val = stroke.isnull().sum() / len(stroke) * 100
-print("\nMissing values ")
+print("\nMissing values ratio ")
 print(miss_val)
 
 print("\nMissing values in variable bmi: {:.2f}%".format(miss_val['bmi']))
@@ -413,14 +469,14 @@ print("stroke shape: {}".format(stroke.shape))
 
 # fillna with bmi mean value
 stroke['bmi'] = stroke['bmi'].fillna(stroke['bmi'].mean())
-# fillna with neversmoked
+# fillna with never_smoked
 stroke['smoking_status'] = stroke['smoking_status'].fillna('never smoked')
 
 clean_stroke = stroke[stroke['smoking_status'].notnull()]
 # show there's no more missing values
 miss_val = clean_stroke.isnull().sum() / len(clean_stroke) * 100
 
-print("\nAfter inspection")
+print("\nAfter cleaning missing values")
 print(miss_val)
 print("\nMissing values in variable 'bmi': {}".format(miss_val['bmi']))
 print("Missing values in variable 'smoking_status': {}".format(miss_val['smoking_status']))
@@ -433,12 +489,11 @@ y = stroke['stroke']
 num_cols = X.select_dtypes(include=['int64', 'float64']).columns.to_list()
 cat_cols = X.select_dtypes(include=['object']).columns.to_list()
 
-# Label encoding
+# Encoding
 X = label_encoder(X)
 
-# Standardscaling
-sc = StandardScaler()
-X[num_cols] = sc.fit_transform(X[num_cols])
+# Scaling
+X[num_cols] = scaling_data(X, num_cols, method='robust')
 
 print(X.head())
 
@@ -449,7 +504,7 @@ ax.set_xticks(np.arange(X.shape[1]))
 ax.set_yticks(np.arange(X.shape[1]))
 ax.set_xticklabels(X.columns, rotation=90)
 ax.set_yticklabels(X.columns)
-# create color Hitmap
+# create color Heatmap
 colorbar = ax.figure.colorbar(im, ax=ax)
 colorbar.ax.set_ylabel("Correlation", rotation=-90, va="bottom", fontsize=10)
 fig.tight_layout()
@@ -462,7 +517,7 @@ show_feature_importances(X, y)
 Data Analysis & Evaluation
 '''
 
-'''K-Nearest Neighbors'''
+'''============ K-Nearest Neighbors ============='''
 # get evaluation result of K-NN classifier using holdout method and k-fold cross validation
 baseModelHoldout, baseModelKFold = train_and_evaluate_knn(X, y, param_tuning=False, test_size=0.2, k=5)
 parameterTunedHoldout, parameterTunedKFold = train_and_evaluate_knn(X, y, param_tuning=True, test_size=0.2)
@@ -478,8 +533,8 @@ kfold_cross_validation_Result = pd.DataFrame([baseModelKFold, parameterTunedKFol
                                              index=['K-NN (default)', 'K-NN (best param)'])
 print(kfold_cross_validation_Result)
 
+'''============== Decision Tree ==============='''
 
-'''Decision Tree'''
 # train, test(validation) split
 '''
 test_size = 0.2 : 20% data is used as test(validation)/ default 0.25
@@ -488,7 +543,7 @@ test_size = 0.2 : 20% data is used as test(validation)/ default 0.25
 - y_train : objective variable in train dataset
 - y_train : objective variable in train dataset
 '''
-x_train, x_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=1)
+x_train, x_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=1, stratify=y)
 print(x_train.shape)
 print(x_test.shape)
 
@@ -497,20 +552,31 @@ dt_clf = DecisionTreeClassifier(random_state=1)
 # Convert the nave of the train dataset column to a list and store it.
 feature_names = X.columns.tolist()
 
-print('DecisionTree Accuracy score:{:.4f}'.format(decisionTree(x_train, y_train, x_test, y_test)))
-best_param, best_score, grid_accuracy_score = gridSearch()
-print('GridSearchCV hyper-parameter :', best_param)
-type(best_param)
-print('GridSearchCV highest average accuracy : {:.4f}'.format(best_score))
-print("Optimal parameter decision tree prediction accuracy : ", grid_accuracy_score)
+train_accuracy, test_accuracy = decisionTree(dt_clf)
+print('DecisionTree training data score:{:.4f}'.format(train_accuracy))
+print('DecisionTree testing data score:{:.4f}'.format(test_accuracy))
 
-drawTree()
+best_param, best_score, estimator = gridSearch()
+print('\nGridSearchCV hyper-parameter :', best_param)
+print('GridSearchCV highest average accuracy : {:.4f}'.format(best_score))
+best_param_train_accuracy, best_param_test_accuracy = decisionTree(estimator)
+print('DecisionTree training data score(best param):{:.4f}'.format(best_param_train_accuracy))
+print('DecisionTree testing data score(best param):{:.4f}'.format(best_param_test_accuracy))
+
+drawTree(dt_clf, estimator)
 
 print('\n# result 5-fold :')
-kfold_mean_accuracy = kFordEv(5)
-print('>> average validation accuracy :', kfold_mean_accuracy)
+kfold_mean_accuracy = kFordEv(5, dt_clf)
+print('->> average validation accuracy :', kfold_mean_accuracy)
+print('\n\n# result 5-fold(best param :')
+kfold_mean_accuracy = kFordEv(5, estimator)
+print('->> average validation accuracy(best param) :', kfold_mean_accuracy)
 
 print('\n# result cross_validation :')
-cv_score, cv_mean_score = crossVal()
+cv_score, cv_mean_score = crossVal(dt_clf)
+print('>cross validation accuracy : {0}'.format(cv_score))
+print('>average validation accuracy : ', np.mean(cv_mean_score))
+print('\n# result cross_validation(best param) :')
+cv_score, cv_mean_score = crossVal(estimator)
 print('>cross validation accuracy : {0}'.format(cv_score))
 print('>average validation accuracy : ', np.mean(cv_mean_score))
